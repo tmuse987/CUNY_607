@@ -1,0 +1,180 @@
+---
+title: "CUNY Data 607 HW-3"
+author: "Todd Weigel"
+date: "September 17, 2016"
+output: html_document
+---
+
+#Assignment Overview
+###This assignment was to familiarize the student with string processing and manipulation, with a special emphasis placed on learning and using regular expressions, a powerful tool to search, find and manipulate text.
+
+##Question 3 From the Assignment:  
+###Take a vector of strings containing names in various formats, (e.g., "last name, first name", "title, first name, last name", etc.) and place them into first name last name order.  A secondary task was to construct logical or boolean vectors that indicated where a name had either a title or a middle initial (second name).  
+
+##Thoughts:
+###There are a number of approaches that could be taken to solve this.  One possibility was to solve the assignment for the given six names, but the approach taken here was hopefully to make this task work for any examples in the formats given in the six names, so that it could be used more generally.
+
+###Also, regarding the second name task, there are potential problems with any straighforward solution, as how does one differentiate a title from a first name in something like: "Lovejoy, Reverend Timothy" and "Burns, Charles Montgomery"?  The assumption used was if there was a middle name, the first name have one initial and a period. 
+
+###Lastly, this solution doesn't deal with idiosyncratic names, such as "Von Simpson" or "O'Reilly" that have two words for names or special characters in a name.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library("stringr")
+```
+
+```{r}
+initializeNames <- function()
+{
+    raw.data <-"555-1239Moe Szyslak(636) 555-0113Burns, C. Montgomery555-6542Rev. Timothy Lovejoy555 8904Ned Flanders636-555-3226Simpson, Homer5543642Dr. Julius Hibbert"
+    library(stringr)
+    return (unlist(str_extract_all(raw.data, "[[:alpha:]., ]{2,}")))
+}
+
+# concatenates first and last names from a vector of names
+getFirstLastNames <-function(names)
+{
+    str_c(getFirstNames(names), " ", getLastNames(names))
+}
+
+#takes a list in of full names and extracts last name
+getLastNames <- function(names)
+{
+    lastNames <- vector(mode = "character", length = 6)
+    for(i in 1:length(names))
+    {
+        if (!is.na(str_locate(names[i], ",")[1]))  ##names reversed
+        {
+            lastNames[i] <- str_extract(names[i], "[[:alpha:]]+")  ##last name at beginning
+        }
+        else
+        {
+            lastNames[i] <- str_extract(names[i], "[[:alpha:]]+$") ##last name at end
+        }
+    }
+    return(lastNames)
+}
+
+##takes a list in of full names, and returns na, or the first name for those full names 
+##where first name is at end of string (e.g, after a ","  and/or "." for middle name)
+getFirstNames <- function(names)
+{
+    firstFromFront <- str_extract(names, "[[:alpha:]]+ ")  #first names that are at front text
+    
+    firstNames <- str_extract(names, ",[[:alpha:] .]+")  # extracts comma and all text after that (if exists) 
+    firstNames <- str_extract(names, ", [[:alpha:]]*")  # removes "second" name, if exists
+    firstFromLast <- str_replace(firstNames, ", *", "")  #removes comma and spaces from front of names 
+    
+    #each list has alternating NA in equivalent indexes, so just take "min" which will return the value 
+    #other than NA of the two vectors and plop into the new vector
+    str_trim(pmin(firstFromFront, firstFromLast, na.rm=TRUE))
+}
+
+isTitleInName <- function(names)
+{
+    return(!is.na(str_extract(names, "^[[:alpha:]]+\\.")))
+}
+
+isInitialInName <- function(names)
+{
+    return(!is.na(str_extract(names, " [[:alpha:]]\\.")))
+}
+
+```
+
+###Below is the execution of the above code, showing the names as given in the assignment:
+```{r} 
+ names <- initializeNames()
+ names 
+```
+###Here is the base function which calls subfunctions as necessary and parses out and re-arranges the names into the expected "First Name" "Last Name" format:
+```{r} 
+ getFirstLastNames(names)
+``` 
+###Next are the two functions to return a boolean vector for when the name has either a title or a middle initial. The returned vector is used to print out the appropriate names from the names vector:
+```{r}
+ names[isTitleInName(names)]
+ names[isInitialInName(names)]
+```
+
+## Question #4
+###While the question asked for a sample that demonstrated the reg expression "worked", samples have also been given of text that while close, more clearly demonstrates that the description accurately describes the expressions function.
+
+###a.)  This example expects a string to start with 1 or more numbers followed by exactly one "$":
+```{r}
+example <- "34567$"  #correct example
+pattern = "[0-9]+\\$"
+str_extract(example, pattern)
+example <- "34567a$"  #incorrect example
+str_extract(example, pattern)
+example <- "34567"  #incorrect example
+str_extract(example, pattern)
+example <- "$"  #incorrect example
+str_extract(example, pattern)
+example <- "23446$$"  #correct example, note 2nd $ is ignored in output
+str_extract(example, pattern)
+
+
+```
+
+####b.)  This pattern extracts the first word with only 1-4 lowercase letters.
+```{r}
+example <- "abc def"
+pattern = "\\b[a-z]{1,4}\\b"
+str_extract(example, pattern)
+example <- "abc1 def"      #first word has number, so 2nd returned
+str_extract(example, pattern)
+example <- "abcde def"  #first word is 5 letters, so 2nd returned
+str_extract(example, pattern)
+example <- "ab abc def"   # all words less than 4, first returned
+str_extract(example, pattern)
+example <- "ab12 abcde def" #first word has number, 2nd has 5 letters, so 3rd returned
+str_extract(example, pattern)
+```
+
+###c.)  The below pattern returns strings that end with ".txt", e.g., text files from a dir listing, and any text can precede the .txt.
+```{r}
+pattern <- ".*?\\.txt$"
+example = "somefile.txt"   #will return file name
+str_extract(example, pattern)
+example = "somefile.withTwoDelimiters.txt"  #will work
+str_extract(example, pattern)
+example = "somefile.!@##@&&&%2345.txt"  #nums and special chars will work
+str_extract(example, pattern)
+example = "somefile.csv"  #will return na
+str_extract(example, pattern)
+
+```
+
+###d.) The below expects a date in the format of mm/dd/yyyy (or possibly dd/mm/yyyy in locales where day proceeds month).
+```{r}
+pattern = "\\d{2}/\\d{2}/\\d{4}"
+example = "01/01/1970"
+str_extract(example, pattern)
+example = "01/01/70"    #two digit year won't work
+str_extract(example, pattern)
+example = "dec/01/1970"  #month name won't work
+str_extract(example, pattern)
+example = "01-01-1970"  # dash won't work
+str_extract(example, pattern)
+
+```
+
+###e.) The example appears to want to extract begin and end tags, as well as the text in-between as in xml (and the like), e.g., <begin_tag>text</end_tag>.  But it didn't seem to work with the backreference.  If the backreference is removed, and replaced with what it was trying to "back reference", then the expression worked.
+```{r}
+pattern = "<(.+?)>.+?</\\1>"  #this doesn't seem to work
+example = "<begin_tag>Sometext</end_tag>"
+str_extract(example, pattern)   # returns NA
+pattern = "<(.+?)>.+?</.+?>"    #replace backreference with explicit pattern to match and it works
+str_extract(example, pattern)  # returns example text
+
+```
+
+
+##Question 9 The code says Congratulations you are a super nerd.
+####Perhaps this explains why Turing's team was able to crack the Enigma long ago, if the code those germans came up with was this simple :)
+```{r}
+code = "clcopCow1zmstc0d87wnkig7OvdicpNuggvhryn92Gjuwczi8hqrfpRxs5Aj5dwpn0Tanwo Uwisdij7Lj8kpf03AT5Idr3coc0bt7yczjatOaootj55t3Nj3ne6c4Sfek.r1w1YwwojigO d6vrfUrbz2.2bkAnbhzgv4R9i05zEcrop.wAgnb.SqoU65fPa1otfb7wEm24k6t3sR9zqe5 fy89n6Nd5t9kc4fE905gmc4Rgxo5nhDk!gr"
+pattern = "[[A-Z]]+"
+str_extract_all(code, pattern)
+```
