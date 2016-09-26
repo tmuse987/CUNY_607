@@ -1,0 +1,154 @@
+---
+title: "CUNY Data 607 Proj-1"
+author: "Todd Weigel"
+date: "September 25, 2016"
+output: html_document
+---
+
+#Assignment Overview
+###This project was to read in a formatted for reading dataset in table format, and appropriately subset and filter the data so only certain portions were saved into a .csv type file, as well as add in a computed column based on data from many other rows.
+
+###The specifics...The file to read in was a file of a chess touranment, containing a list of players (two lines per player) their state, chess ID, pre and post-ratings, and the results of the tournament (wins/losses/draws etc., and the points won). Then from that file, select the Player Name,  State, Points Won, Pre-Rating, and average of his/her opponents pre-ratings and save those values into a .csv formatted file.
+
+
+##Thoughts (or Assumptions):
+###The solution should work for any sized input file (within reason of course) and the input file'S formatting cannot change (results will be unpredictable if is...).
+
+###To use the solution (outside of the markdown) call the functions in this order:
+* initialization
+* createPlayerDataFrame (passing in filename to read from)
+* computeOppAvgRating  (using result of prior function as parameter)
+* createSubsettedPlayerDF (using results of prior two functions as parameters)
+* writeCSV (with df from prior function, and a file name)
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+##Initialization Function, loads needed library
+intialization <- function()
+{
+    library(stringr)
+}
+
+##Creates a Data Frame from the passed in or deafaulted tournament file
+createPlayerDataFrame <- function(fileName = "")
+{
+    if (is.null(fileName)|| fileName=="")
+    {
+        rawTournament <- readLines("tournamentinfo.txt")
+    }
+    else
+    {
+        rawTournament <- readLines(fileName)
+    }
+    ##the file has three lines repeated, two of are interest,  filter to the two sets of lines we care about
+    player1stLine <- rawTournament[str_detect(rawTournament, "^ *\\d+ | Pair")]
+    player2ndLine <- rawTournament[str_detect(rawTournament, "^ *[[:alpha:]]{2} | Num ")]  ## gets player 2nd line
+    
+    ##read the delmited lines into variables
+    player1stLineDelim <- read.delim(text = player1stLine, sep = "|", stringsAsFactors = FALSE)
+    player2ndLineDelim <- read.delim(text = player2ndLine, sep = "|", stringsAsFactors = FALSE)
+    
+    ##merge the two delmited variables into one dataframe
+    dfPlayers <- data.frame(player1stLineDelim, player2ndLineDelim)
+    dfPlayers <- subset(dfPlayers, select = c(-X, -X.1))  #(remove the "X" column")
+    
+    
+    
+    ##using regex, find the prerating value of each player and append to end of dataframe
+    preRating <- str_replace(str_extract(dfPlayers[["USCF.ID...Rtg..Pre..Post."]], "R: +\\d{1,4}"),"R: *", "")
+    dfPlayers <- data.frame(dfPlayers, preRating, stringsAsFactors = FALSE)
+    dfPlayers <- populateHeaders(dfPlayers)
+    return(dfPlayers) 
+}
+
+##function returns a numeric of the opp average rating from the passed in vector 
+##of rounds which contains entries into the vector of oppsRatings
+getOppAvgRating <- function(vRounds, vOppsRating)
+{
+    round(mean(vOppsRating[unlist(vRounds)], na.rm = TRUE))
+}
+
+##funciton takes in the players data.frame, and computes a vector of the
+## average opponent ratings
+computeOppAvgRating <- function(dfPlayers)
+{
+    
+    rounds <- data.frame(lapply(lapply(lapply
+                        (dfPlayers[,grepl("ROUND", names(dfPlayers))], str_replace, "[[:alpha:]]", "")
+                        ,str_trim)
+                        ,as.numeric)
+                        ,stringsAsFactors = FALSE)
+    
+    apply(rounds, 1, getOppAvgRating, as.numeric(dfPlayers$PRERATING))
+}
+
+
+
+##creates dataframe of player information required in the asignment
+createSubsettedPlayerDF <-function(dfPlayers, vOppsAvgRating)
+{
+        df <- data.frame(dfPlayers$PLAYER_NAME, dfPlayers$STATE, 
+                         dfPlayers$TOTAL_PTS, dfPlayers$PRERATING, vOppsAvgRating)
+        names(df) <- c( "Player Name", "State", "Total Points", "Pre-Tournament Rating", "Average Opp Rating")
+        return(df)
+}
+
+##generic wrapper for csv, doesn't really do anything useful, 
+##other than provide a function to demonstrate in the markdown file
+writeCSV <- function(df, fileName)
+{
+    write.csv(df, file = fileName)
+}
+
+##Populate row headers with more meaningful names, especially if we might want to 
+##do further data analysis on the input file later
+populateHeaders <- function(dfp)
+{
+     names(dfp) <-(c("NAME",
+      "PLAYER_NAME",
+      "TOTAL_PTS",
+      "ROUND1",
+      "ROUND2",
+      "ROUND3",
+      "ROUND4",
+      "ROUND5",
+      "ROUND6",
+      "ROUND7",
+      "STATE",
+      "ID_AND_PREPOST_RATING",
+      "PTS",
+      "RESULT1",
+      "RESULT2",
+      "RESULT3",
+      "RESULT4",
+      "RESULT5",
+      "RESULT6",
+      "RESULT7",
+      "PRERATING"))
+    return(dfp)
+
+}
+```
+
+## Here is the "head"" of the input file, to show how the input looks:
+```{r}
+head(readLines("tournamentinfo.txt"))
+```
+
+
+## Below is the execution of the solution's functions in the order suggested above
+```{r}
+intialization()
+dfP <- createPlayerDataFrame("tournamentInfo.txt")
+writeCSV(createSubsettedPlayerDF(dfP, computeOppAvgRating(dfP)), file = "chessResults.csv")
+```
+
+## Finally below is the head of the .csv file, demonstrating the output is generated as expected
+
+```{r}
+head(read.csv("chessResults.csv"))
+```
