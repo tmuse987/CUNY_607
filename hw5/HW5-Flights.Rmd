@@ -1,0 +1,137 @@
+---
+title: "CUNY 607 HW5"
+author: "Todd Weigel"
+date: "October 2, 2016"
+output: pdf_document
+---
+
+#Assignment Overview
+###This assignment was to get an understanding of "Tidy" data, both by manipulating data in a cluttered or "untidy" format as well as by using some of the newer R packages, tidy.r and dplyr.r.
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+###Below is the code module containing functions to initialize the environment, as well as encapsulate some of the more cumbersome processing, including transforming the data into a "tidy" one, as well as some analysis functions.
+
+```{r}
+initialize <-function()
+{
+    library(stringr)
+    library(tidyr)
+    library(dplyr)
+}
+
+
+getFlightDF <- function(filename)
+{
+    flights <- read.csv(filename) %>%      #use piping
+        gather(destination, counts, -X, -X.1, na.rm = TRUE) %>%  #rotate the Destination Columns
+        rename(delayed = X.1) %>%    # name the column with delayed or ontime indicators
+                #second row col 1 should always have 1st row col 1 values, so use lag function to move values down one
+                #1row and assign to  rows 2,4,6.... (note is.na needed because 1st row from lag is na and need to chg to space)
+        mutate(airline= str_c(X, unlist(lapply(lag(X), function(x) {x[is.na(x)] <-"" ; x})))) 
+
+    flights$X <- NULL  #(easier than listing column names in mutate)
+    flights <- flights[c("airline", "delayed", "destination", "counts")]  #just rearrange columns
+    flights$delayed <- (!flights$delayed == "on time")                    # set delayed column to bool vals
+    return(flights)
+}
+
+
+getMeanFlights <- function(df, bDelayed = TRUE)
+{
+    return(df%>% 
+        filter(delayed == bDelayed) %>%
+        summarise(mean(counts)))
+}
+
+
+getWorstDestinationByCount <- function(df)
+{
+    byDest <- df %>% group_by(destination)  %>%
+                     filter(delayed == TRUE) %>%
+                     summarise(cityCounts = sum(counts))
+    return(byDest[which.max(byDest$cityCounts),])
+}
+
+getBestDestinationByCount <- function(df)
+{
+    byDest <- df %>% group_by(destination)  %>%
+        filter(delayed == TRUE) %>%
+        summarise(cityCounts = sum(counts))
+    return(byDest[which.min(byDest$cityCounts),])
+}
+
+
+
+getBestWorstDestinationByPctDelayed <- function(df, worst = TRUE)
+{
+    grouped <- df %>% group_by(destination)
+    delayed <- grouped %>% filter(delayed == TRUE) %>%
+                           summarise(cityCounts = mean(counts))
+    notDelayed <- grouped %>% filter(delayed == FALSE) %>%
+                              summarise(cityCounts = mean(counts))
+    pctDelayed <- (delayed[,2]/notDelayed[,2])
+   
+    if (worst)
+    {
+        delayed$destination[which(pctDelayed == max(pctDelayed))]
+    }
+    else
+    {
+        delayed$destination[which(pctDelayed == min(pctDelayed))]
+    }
+}
+
+
+```
+
+###Lets first look at dataset before tidying:
+```{r }
+read.csv("flights.csv")
+```
+
+###And as you can observe, it is a mess.  Now lets initialize our environment, run the function to tidy the data, and then look at the tidy dataset:
+```{r warning=FALSE}
+initialize()
+fDf <- getFlightDF("flights.csv")
+fDf
+```
+
+###Much better looking...as one can see, there is one observation per row of data, basically that observation consists of the counts of an airline's flights for a given destination city, and whether the count is on-time flights or delayed flights.
+
+###The code in that get function was as follows.  First a the reading of the file with read.csv.  Then the "gather" function was use to basically rotate the 5 city columns and their corresponding counts to be rows of data rather than columns.   Next some renames occurred, to add readability.  Next we used the lag function to populate the now "missing" airline info in every other row.  Lastly, some rearranging of the columns was done, as well as changing the "on-time" and "delayed" text to instead be boolean  TRUE or FALSE values. Let's now call some of the functions for analysis:
+
+```{r}
+getBestDestinationByCount(fDf)
+getWorstDestinationByCount(fDf)
+```
+Those returned the best and worst destinations by total delayed flights.  That was done by using the group by function, a filter on rows with delays, getting the sum of counts, and returning the max or min as relevant.
+
+```{r}
+getBestWorstDestinationByPctDelayed(fDf, TRUE)
+getBestWorstDestinationByPctDelayed(fDf, FALSE)
+```
+This returned either the best or worst destination by the percentage of delayed flights, which is probably a more useful metric.  This required similar techniques to the others, with the addition of having to divide by grouped sums and then finding the appropriate subsetted row.
+
+
+###Here is a plot of the ontime versus delayed flights, showing that flights are much more likely to be ontime versus delayed.
+
+```{r}
+plot(subset(fDf, delayed==TRUE)[,"counts"], subset(fDf, delayed==FALSE)
+     [,"counts"], xlab = "Delayed Flights", ylab = "On Time Flights")
+```
+##Some toughts regarding "tidy"" data.  Clearly, it does take some work to make one's data neat, but as many a mother or teacher has likley said, preparation is worth it's weight in gold.  It would have been far more difficult to try and accomplish any kind of analysis on the original data (even the simple analysis done here), and so this is a skill that will need to be well learned.  One thing "sort of" learned, but still needing much research is the new "tibble" object that some of the dplyr functions return...that was a surprise and actually made some of the work slightly harder, as there was just a lack of knowledge as to what one should do with it.
+
+## Lastly, so as not to take up space, the original data set was expanded to seven cities and three airlines to test that the "tidying" of the data was at least a little scalable.  Below is the load and view of that bigger dataset, as well as the data.frame that it was "tidied"" into.
+
+```{r}
+read.csv("flightsbig.csv")
+getFlightDF("flightsbig.csv")
+```
+
+
+
