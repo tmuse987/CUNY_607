@@ -1,0 +1,274 @@
+---
+title: "Untitled"
+author: "Todd Weigel"
+date: "October 12, 2016"
+output: html_document
+---
+
+#Assignment Overview
+###This project's main focus was to read in different data sets in various states of "messiness" and perform "Data Wrangling" to make them "tidy", so as to allow easier analysis upon the data.  Also, as part of the tasks, was to perform some rudimentary analytics upon the cleaned up data.  Lastly, the assignment was to help practice in using some of dplyr tidyr modules.
+
+###The specifics...The first file to read in was a file of disability demographics from the census bureau.
+
+##The Disability Census File.
+###This file contains 6 columns of data per state (and the US as a whole) regarding the total population, absolute numbers with disabilty, and percentages with disablility, along withe error margin columns for each of those.  So the data obviously becomes very wide if all states were to be included.  The First column contains both disabilities as well as age groups...each age group then has a number of disabilities listed underneath.  The goal was to "Wrangle" this so that there is a column of data indicating the location (state or US as whole), and to make a column with the age groups, so that it would be easy to query a given disability and see results for each state, or each age group.  Secondary tasks were to remove decorations, to allow analytics on the numbers, this would be things like removing comma's, percent signs and the like.
+
+##Thoughts (or Assumptions):
+###The solution should be generic enough to work for any sized input file, but only 3 states and the US as a whole were included to keep this sample solution to a reasonable size. Other code was attempted to be as generic as possible, so that if additional categories of ages or disabilities, or additional columns per location are adding in the future, re-work should hopefully be minimal.  Also, a decision was made to keep the "total" rows from the original dataset...this has good and bad points, the good is data is already nicely summed, the bad it makes some other statistical analysis more complicated without filtering those rows.
+###Also, the file including some more data, at the bottom of the input, but these data did not fit in with the data I wrangled. These data would need to be set up in different data.frames (tables), possibly linked with a common key to allow sql like querying and joining.
+
+###The code is below, it is functionalized to help break up what is happening.  Below that we will execute the code and provide commentary.
+
+
+```{r warning = FALSE, message = FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+initialize <-function()
+{
+    library(stringr)
+    library(tidyr)
+    library(dplyr)
+    library(plyr)
+}
+
+    initialize()
+
+getCensusDF <- function(fileName = "census_disability.csv")
+{
+    ##dfCensus <- read.csv(fileName, stringsAsFactors = FALSE)
+    dfCensus <- read.csv("census_disability.csv", stringsAsFactors = FALSE)
+    ##remove top comment rows and bottom comment rows which appear after "independent living difficulty" row
+    ##dfCensus <- slice(dfCensus, 6:which(str_trim(dfCensus[,1]) == "Independent living difficulty"))
+    dfCensus <- slice(dfCensus, 6:(which(str_trim(dfCensus[,1]) == "SEX") -2) )
+    dfCensus <- subset(dfCensus, select = c(-X,-X.1,-X.3, -X.4))
+    
+    #colnames(dfCensus) <- seq(1:length(dfCensus)) #makes columns names numbers
+    
+    
+    dfCensus[1,2:length(dfCensus)] <- unlist(rep(dfCensus[1, seq(2, length(dfCensus), 6)], each = 6))  # file in blank header cells
+    dfCensus[2,2:length(dfCensus)] <- unlist(rep(dfCensus[2, seq(2, length(dfCensus), 2)], each = 2))  # fill in blank subheader cells
+    dfCensus[2,] <- str_c(dfCensus[2,], " ",  dfCensus[3,]) #combine header/subheader
+    colnames(dfCensus) <- dfCensus[1,]    #make header row into columnames
+    dfCensus <- dfCensus[c(-1,-3),]       #remove rows that were header/subheader
+    
+    return(subset(dfCensus, (str_trim(dfCensus[,2])!= "")))  # remove blank lines and return
+}  
+
+getDataRotatedViaState <-function(df)
+{    
+    dfTranspose <- NULL
+    
+    #loop thru to do one state (or us as whole) at a time
+    while (length(dfCensus) >=7)
+    {
+        dfOneLoc <- dfCensus[,1:7]  # get df of one location
+        #insert location into df as col2
+        dfOneLoc <- cbind(Subject = dfOneLoc[,1],  Location = rep(colnames(dfCensus[2]), nrow(dfCensus)), dfOneLoc[,2:7])   
+        colnames(dfOneLoc) <- c(colnames(dfOneLoc[1:2]), dfOneLoc[1,3:8])  #rename some cols
+        dfOneLoc <- dfOneLoc[-1,]  #remove header row that is now colnames
+        
+        if (is.null(dfTranspose))
+        {   
+            dfTranspose <- dfOneLoc
+        }
+        else  #if 2+ loop, append
+        {   
+            dfTranspose <- bind_rows(dfTranspose, dfOneLoc)
+        }
+        if(!length(dfCensus) <8)  #if still another state left to process, chop off front that we just transposed
+        {
+            dfCensus <- select(dfCensus, Subject, 8:length(dfCensus))    
+        }
+        else
+        {
+            dfCensus <- dfCensus[,-7]  #drop a column so fall out of loop
+        }
+    }
+    return(dfTranspose)
+}
+
+createDFWithAgeCol <- function(dfTranspose, dfOrig)
+{
+    #get list of ages, e.g., "population under 5 years
+    ageGroup <- unique(as.character(filter(dfTranspose, grepl("Population", Subject))[,1]))
+    #get list of disabilities e.g., with a hearing difficulty
+    disGroup <- c("Total", unique(as.character(filter(dfTranspose, grepl("With", Subject))[,1])))
+    
+    
+    #create df with setup with appropriate number of rows for an individual location
+    dfDis <- data.frame(Disability = rep(disGroup, length(ageGroup)), Age = rep(ageGroup, 1, each = length(disGroup)), 
+                        stringsAsFactors = FALSE)
+    cols <-  colnames(dfTranspose)[2:length(dfTranspose)]
+    dfDis[, cols] <- " "    ##leave spaces instead of nulls or NA's do to problem assigning values below
+    dfDis <- rbind(" ", dfDis)
+    dfDis[[1,1]] <- "Total for Location"
+    dfDis[[1,2]] <- "Total All Groups"
+    
+    dfTemp <- NULL
+    locations <- unique(dfTranspose$Location)  #i.e., the states and US 
+    #loop for unique number of locations to create empty rows (mostly) for each location
+    for (i in 1:(length(unique(dfTranspose$Location))))
+    {
+        if (is.null(dfTemp))
+        {
+            dfDis$Location <- locations[i]
+            dfTemp <- dfDis
+        }
+        else
+        {
+            dfDis$Location <- locations[i]
+            dfTemp <- rbind(dfTemp, dfDis)
+        }
+    }
+    dfDis <- dfTemp
+    rm(dfTemp)
+    return(dfDis)
+}   
+    
+
+#combines mostly empty dfAge df, with partially tidy dftidy
+createFinalTidy <-function(dfTidy, dfAge)
+{
+    #populate total lines
+    dfAge[str_detect(dfAge$Age, "Total"),3:length(dfAge)]  <- dfTidy[str_detect(dfTidy$Subject, "Total"),2:length(dfTidy)]
+
+    #populate all rows with actual data
+    for(loop in 2:nrow(dfTidy))
+    {
+        #if we are at a new population set the total line 
+        if (!is.na(str_extract(dfTidy[loop,"Subject"], "^Population")))
+        {
+            ageGroup <- as.character(dfTidy[loop,"Subject"])
+            dfAge[dfAge$Disability == "Total"
+                  & dfAge$Age == ageGroup
+                  & dfAge$Location == dfTidy$Location[loop]
+                  ,3:9
+                 ] <- dfTidy[loop, 2:8]
+        }
+        else  # set the values for other lines
+        {
+            dfAge[dfAge$Disability == as.character(dfTidy$Subject[loop])
+                  & dfAge$Age == ageGroup
+                  & dfAge$Location == as.character(dfTidy$Location[loop])
+                 ,3:9
+                 ] <- dfTidy[loop,2:8]
+        }
+    }
+    
+    #"private" function to make all blanks or (x) to be NA
+    updateBlanksToNA  <-function(col)
+    {
+        col[str_detect(col, "^ ")] <- NA
+        col[str_detect(col, "(X)")] <- NA
+        return(col)
+    }
+
+    dfAge <- data.frame(lapply(dfAge, function(x) {str_replace_all(x, ",*", "")}))
+    dfAge$Percent.with.a.disability.Estimate <- 
+            unlist(lapply(dfAge$Percent.with.a.disability.Estimate, function(x) {str_replace(x, "%", "")} ))
+    dfAge$Total.Margin.of.Error <- 
+             unlist(lapply(dfAge$Total.Margin.of.Error, function(x) {str_replace(x, "\\+/-", "")} ))
+     
+    dfAge$Percent.with.a.disability.Margin.of.Error <-
+         unlist(lapply(dfAge$Percent.with.a.disability.Margin.of.Error, function(x) {str_replace(x, "\\+/-", "")} ))
+
+    dfAge$With.a.disability.Margin.of.Error <-
+        unlist(lapply(dfAge$With.a.disability.Margin.of.Error, function(x) {str_replace(x, "\\+/-", "")} ))
+
+    #update blanks function changed to matrix, so coerce into df
+    dfAge <- data.frame(apply(dfAge, 2, updateBlanksToNA),stringsAsFactors = FALSE)
+    return(dfAge)
+    
+    
+}
+
+```
+
+
+##Execution:
+
+###First we load the file into the environment and make do some minor processing to remove extraneous lines, make col headings, etc.
+
+###Below is sample of unedited file, as well as sample of the first set of "wrangling".
+
+```{r}
+read.csv("census_disability.csv")[6:20,1:10]
+dfCensus <- getCensusDF()
+dfCensus[1:5,1:5]
+```
+
+###Next we started tidying, by rotating the data so that location is its own column with corresponding data to the right.
+```{r}
+dfTidy <- getDataRotatedViaState(dfCensus)
+dfTidy[1:5,1:5]
+```
+
+###Next an additional (mostly blank) dataframe was actually created.  This was used to rotate the age groups out of the same column as the kinds of disability.  Then rows to accomodate all rows for all the locations were created, with blank entries for all the true data fields.
+```{r}
+dfAge <- createDFWithAgeCol(dfTidy, dfCensus)
+dfAge[1:6,1:6]
+```
+###Lastly the two data from the original partially tidied dataframe is merged into this data frame that contained the final format.  This required a bunch of loops as there wasn't an effective way to parse the files otherwise.  The data also had it's final clean up, to remove formatting marks to the data.
+
+###A sample of the data is displayed in two formats, one wide, so all columns in final dataset can be viewed, and one narrow, so that the all types of rows that are in final set can be seen.
+
+```{r}
+dfTidy <- createFinalTidy(dfTidy, dfAge)
+dfTidy[1:3,]
+
+dfTidy[1:33,1:3]
+```
+
+##Some Rudimentary analysis is below, to show that we can fairly easily query the data.frame to recieve results of interest.
+
+####Show the "Total"" Rows using filter:
+```{r}
+filter(dfTidy, dfTidy$Disability == "Total")
+```
+####Disabilities of over 20% in population:
+```{r}
+filter(dfTidy, as.numeric(dfTidy$Percent.with.a.disability.Estimate) > 20)
+```
+####Max and Min Populations and then Max and Min disability populations:
+```{r}
+dfTidy[which.max(dfTidy$Total.Estimate),]
+dfTidy[which.min(dfTidy$Total.Estimate),]
+dfTidy[which.max(dfTidy$With.a.disability.Estimate),]
+dfTidy[which.min(dfTidy$Total.Estimate),]
+```
+
+
+####Get The mean of PCT disabled:
+```{r}
+
+dfTidyNoTot <- dfTidy[dfTidy$Age != "Total All Groups",]
+summarise(dfTidyNoTot, avg = mean(as.numeric(dfTidyNoTot$Percent.with.a.disability.Estimate), na.rm = TRUE))
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
