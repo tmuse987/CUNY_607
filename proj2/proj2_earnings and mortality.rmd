@@ -1,0 +1,270 @@
+---
+title: "CUYNY607 Proj2, parts 2 and 3"
+author: "Todd Weigel"
+date: "October 13, 2016"
+output: html_document
+---
+#Assignment Overview
+##This is parts 2 and 3 of the assignment (i.e., the 2nd and 3rd tidying efforts...)
+
+###Again as stated in the part 1 RMD file, this project's main focus was to read in different data sets in various states of "messiness" and perform "Data Wrangling" to make them "tidy", so as to allow easier analysis upon the data.  Also, as part of the tasks, was to perform some rudimentary analytics upon the cleaned up data.  Lastly, the assignment was to help practice in using some of dplyr tidyr modules.
+
+##The specifics...
+###Part 2,  read in a wide .csv earnings file that contains counts of people per an earning groups (e.g., 20k-24.99k), further grouped by age and sexes.  Then make it tidy and lastly do analysis to determine some gender inequalities in income.  This dataset was from Ahsanul Choudhury's submission.
+###Part 3,  read in a file regarding child mortality (under 5 years of age) per country, via male, female, sex ratio and P factor, further divided by a series of years.  Then take it and make it tidy for analysis, and do some analyis on which countries have best/worst mortality, average (mean) mortality, trend and so forth.  This data set was from Upal Chowdhury's submission.
+
+##The Earnings File
+###This file contains columns of data by an earning group (under 5k, 5k-9.99k, etc.) with one column as absolute count and the other the percentage that column is to the row as a whole.  The rows of the dataset are 3 groups, male, female, and both.  Each of those are bracketed into age groups, typical 5 years, but with variation for young and old wokers.  The tidying will be to take the columns of income and rotate them into 3 columns, the income group, with the absolute number and percent columns adjacent to that column.  Next the rowwise grouping of sexes will be made into a column adjacent to the other 3.  Lastly the age groups that were grouped by sex will be left as a variable column (less the rotated sexes).
+
+##The Child Mortality File
+###This file contains the mortality of children under 5 for most (if not all countries in the world).  The first 3 columns (country code, county, and uncertaintity) will be let alone, as those columns form nice variables.  The other columns contain 4 groupings by male, female, sex ration, and P factor, each subdivided by 4 years (1990,2000,2010,2015).  These 4 sets of columns will be condensed into just 4 columns of the groupings, with the year being rotated into a "year" column.
+
+##Thoughts (or Assumptions):
+### The code is hopefully again generic enough to allow minimal change if the dataset grows (e.g., more earnings brackets in the one, or more countries in the other).   Also, like in the disability dataset, the total rows were left from the original in the earnings tidy dataset, and that is a compromise, as it is makes some analysis easier, and some harder.
+
+###The code is below, it is functionalized to help break up what is happening.  Below that we will execute the code and provide commentary.
+
+###First the earnings core code of functions:
+```{r warning = FALSE, message = FALSE}
+initialize <-function()
+{
+    library(stringr)
+    library(tidyr)
+    library(dplyr)
+    library(plyr)
+}
+
+
+getEarningsAsDF <- function(filename = "earnings.csv")
+{
+
+    df <- read.csv(filename, stringsAsFactors = FALSE, skip =5, header=FALSE)
+    
+    #make col3 = col2 and so forth by 2
+    df[1,seq(3, length(df), by = 2)] <- df[1,seq(2, length(df), by = 2)]
+    df[1,] <- str_c(df[1,], " ", df[2,])
+    df <- df[-2,]
+    df <- df[1:39,]
+    df[1,1] <- "Ages"
+    colnames(df) <- df[1,]
+    return(df)
+}
+
+
+getEarningsAsTidyDF <- function(df)
+{
+    df <- filter(df, Ages != "")   #remove blank rows
+    df <- df[-1,]
+    
+    # add column at end containg gender of corresponding rows
+    df["Sex"] <- unlist(list(rep("B", nrow(df)/3),rep("M", nrow(df)/3),rep("F", nrow(df)/3)))
+    
+    ##make df with just "number cols"
+    dfNums <- select(df, Ages, Sex, contains("number"))
+    
+    ##make df with just  "pct cols"
+    dfPct <- select(df, Ages, Sex, contains("percent"))
+    
+    #rotate both of them
+    dfEarnNumRot <- gather(dfNums, Income, Amt, -Ages, -Sex)
+    dfEarnPctRot <- gather(dfPct, Income, Pct, -Ages, - Sex)
+    
+    #put those rotated columns together
+    dfEarnNumPct <- bind_cols(dfEarnNumRot, dfEarnPctRot[length(dfEarnPctRot)])
+    
+    #some general text cleanup
+    dfEarnNumPct$Income <- str_replace(dfEarnNumPct$Income, "Number", "")
+    dfEarnNumPct$Ages <- str_replace(dfEarnNumPct$Ages, "Both sexes|Male|Female", "Total")
+    dfEarnNumPct$Amt <- (lapply(dfEarnNumPct$Amt, function(x) {str_replace_all(x, ",*", "")}))
+    return(dfEarnNumPct)
+}
+```
+
+
+###First we call code to load the data into a basic data frame, and clean up of some extraneous data.  A subset of the original csv is shown, and then a subset of the partially tidied file.
+```{r}
+initialize()
+df <- getEarningsAsDF()
+
+read.csv("earnings.csv")[1:6,1:12]
+df[1:5,1:10]
+```
+
+###Next we will do final tidying by rotating some of the income data and adding a gender column:
+```{r}
+dfTidy <- getEarningsAsTidyDF(df)
+dfTidy[1:10,]
+```
+
+
+###Some Analysis: 
+###First male/female ratios of high and low income brackets, clearly showing that in these subset men are disprortionally representing in the higher income and the opposite for the lower income bracket.
+```{r}
+#Percantages
+maleHiIncome <- filter(dfTidy, Sex == "M" & str_trim(Income) == "$100,000 and over")[,5]
+femaleHiIncome <- filter(dfTidy, Sex == "F" & str_trim(Income) == "$100,000 and over")[,5]
+as.numeric(maleHiIncome)/as.numeric(femaleHiIncome)
+
+maleLowIncome <- filter(dfTidy, Sex == "M" & str_trim(Income) == "$10,000 to $14,999")[,5]
+femaleLowIncome <- filter(dfTidy, Sex == "F" & str_trim(Income) == "$10,000 to $14,999")[,5]
+as.numeric(maleLowIncome)/as.numeric(femaleLowIncome)
+
+#Absolute numbers
+maleHiIncome <- filter(dfTidy, Sex == "M" & str_trim(Income) == "$100,000 and over")[,4]
+femaleHiIncome <- filter(dfTidy, Sex == "F" & str_trim(Income) == "$100,000 and over")[,4]
+as.numeric(maleHiIncome)/as.numeric(femaleHiIncome)
+
+maleLowIncome <- filter(dfTidy, Sex == "M" & str_trim(Income) == "$10,000 to $14,999")[,4]
+femaleLowIncome <- filter(dfTidy, Sex == "F" & str_trim(Income) == "$10,000 to $14,999")[,4]
+as.numeric(maleLowIncome)/as.numeric(femaleLowIncome)
+
+```
+
+
+###If we look for the most common income bracket for male and females, we again find that for males the income bracket is again higher than for females.
+```{r}
+idx <- which.max(as.numeric(filter(dfTidy, str_trim(Ages) == ".45 to 49 years" & Sex == "M"
+                                    & str_trim(Income) != "Total")[,5]))
+filter(dfTidy, str_trim(Ages) == ".45 to 49 years" & Sex == "M" & str_trim(Income) != "Total")[idx,]
+
+idx <- which.max(as.numeric(filter(dfTidy, str_trim(Ages) == ".45 to 49 years" & Sex == "F"
+                                     & str_trim(Income) != "Total")[,5]))
+filter(dfTidy, str_trim(Ages) == ".45 to 49 years" & Sex == "F" & str_trim(Income) != "Total")[idx,]
+```
+
+
+##Now the code for the child mortality.
+
+```{r warning=FALSE, message=FALSE}
+initialize <-function()
+{
+    library(stringr)
+    library(tidyr)
+    library(dplyr)
+    library(plyr)
+}
+ 
+
+Get7ColsGatheredAndDrop4C <- function(df)
+ {
+     dfGather <- df[,1:7]                                 #take 1st 7 cols
+     dfGather <- gather(dfGather, ColKey, ColVal, -1:-3)   #gather around first 3 cols
+     df <- df[,-4:-7]                                     #drop col 4-7 in original df
+     return(list(dfGather, df))                           #return list of 2 dataframes one "gathered, 
+                                                          #one original with columns processed removed
+}
+
+
+#reads in filename and creates uncluttered DF (i.e., extraneous lines and columns and so forth removed)
+GetMortalityDF <- function(filename = "SexSpecificMortality.csv")
+{
+    dfCMort<- read.csv(filename, stringsAsFactors = FALSE, skip =6, header=FALSE)
+    dfCMort <-dfCMort[,1:19]  ##drop trailing empty cols which were part of .csv
+    dfCMort[1,4:length(dfCMort)] <- unlist(rep(dfCMort[1, seq(4, length(dfCMort), 4)], each=4))  ##assign blank header values
+    dfCMort[1,] <- str_c(dfCMort[1,], dfCMort[2,])
+    colnames(dfCMort) <- (dfCMort[1,])
+    
+    dfCMort <- dfCMort[c(-1,-2),]
+    dfCMort <- subset(dfCMort, Country != "") #drop closing comments which are in col 1
+    return(dfCMort)
+}
+
+#makes the df tidy for analysis
+GetaTidyDeathDF <-function(df)
+{    
+    dfTidy <- NULL
+    dfWorking <- df
+    
+    # this is going to loop through the four sections and with one section at a time
+    while(length(dfWorking) >= 7)
+    {
+        #get one section of data
+        listDF <- Get7ColsGatheredAndDrop4C(dfWorking)
+        if (is.null(dfTidy))  #i.e., first time thru loop
+        {
+            #make temp col names of male1990, male2000 or female 1990 etc.
+            cNames <- c(str_extract(colnames(dfWorking)[1:4],"[[:alpha:]]*"),
+                        str_c(str_extract(colnames(dfWorking)[4],"[[:alpha:]]*"), " Values"))
+            
+            ##dfTidy gets fist df in list...the "tidy" one
+            dfTidy <- data.frame(listDF[1])  
+        }
+        else
+        {
+            cNames <- c(colnames(dfTidy), 
+                        str_c(str_extract(colnames(dfWorking)[4],"[[:alpha:]]*"), " Values"))
+            
+            #add two rotated columns
+            #dfTidy <- bind_cols(dfTidy, data.frame(listDF[1])[,5]) does not work???, so add 2 cols and delete one
+            dfTidy <- bind_cols(dfTidy, data.frame(listDF[1])[,4:5])
+            dfTidy <- dfTidy[,-(length(dfTidy)-1)]
+            
+        }
+        colnames(dfTidy) <- cNames
+        dfWorking <- data.frame(listDF[2])  #dfworking is original with cols slowly being removed as processed
+    }
+    colnames(dfTidy)[4] = "Year"  
+    colnames(dfTidy)[5] = "Mort Male"
+    colnames(dfTidy)[6] = "Mort Female"
+    colnames(dfTidy)[6] = "Sex Ratio"
+    dfTidy$Year <- str_replace(dfTidy$Year, "Male", "")
+    return(dfTidy)
+}
+
+```
+
+###Again we will initialize, and reading the .csv file, doing some basic clean up work, and we will display subsets fo the original and the partially tidied file.
+```{r}
+initialize()
+dfPartTidy <- GetMortalityDF()
+read.csv("SexSpecificMortality.csv")[1:6,1:6]
+dfPartTidy[1:6,1:6]
+```
+
+
+###Next we will do the real work of tidying.  This involves looping through the wide .csv, cutting up and working on one section of the 4 major columns at a time, to rotate the four minor columns under each of the major ones.
+
+```{r}
+dfTidy <-GetaTidyDeathDF(dfPartTidy)
+dfTidy[1:10,]
+```
+
+
+#Here we can see child mortality is decreasing over the years.
+```{r}
+mean(as.numeric(filter(dfTidy, Year == 1990 & Uncertainty == "Median")[,5]))
+mean(as.numeric(filter(dfTidy, Year == 2000 & Uncertainty == "Median")[,5]))
+mean(as.numeric(filter(dfTidy, Year == 2010 & Uncertainty == "Median")[,5]))
+mean(as.numeric(filter(dfTidy, Year == 2015 & Uncertainty == "Median")[,5]))
+
+#this is not doing what I expected...
+dfTidy %>% group_by(Year) %>% summarise(avg = mean(as.numeric(`Mort Male`)))
+
+```
+
+
+#Finally, here we see the countries with the min and max mortality for a given year.
+```{r}
+idx <- which.max(as.numeric(filter(dfTidy, Uncertainty == "Median")[,5]))
+filter(dfTidy, Uncertainty == "Median")[idx,]
+
+idx <- which.min(as.numeric(filter(dfTidy, Uncertainty == "Median")[,5]))
+filter(dfTidy, Uncertainty == "Median")[idx,]
+
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

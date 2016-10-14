@@ -7,38 +7,56 @@ initialize <-function()
 }
 
 
-dfEarnings <- read.csv("earnings.csv", stringsAsFactors = FALSE, skip =5, header=FALSE)
+getEarningsAsDF <- function(filename = "earnings.csv")
+{
 
-#make col3 = col2 and so forth by 2
-dfEarnings[1,seq(3, length(dfEarnings), by = 2)] <- dfEarnings[1,seq(2, length(dfEarnings), by = 2)]
-dfEarnings[1,] <- str_c(dfEarnings[1,], " ", dfEarnings[2,])
-dfEarnings <- dfEarnings[-2,]
-dfEarnings <- dfEarnings[1:39,]
-dfEarnings[1,1] <- "Ages"
-
-colnames(dfEarnings) <- dfEarnings[1,]
-
-dfEarnings <- filter(dfEarnings, Ages != "")
-dfEarnings <- dfEarnings[-1,]
-
-dfEarnings["Sex"] <- unlist(list(rep("B", nrow(dfEarnings)/3),rep("M", nrow(dfEarnings)/3),rep("F", nrow(dfEarnings)/3)))
+    df <- read.csv(filename, stringsAsFactors = FALSE, skip =5, header=FALSE)
+    
+    #make col3 = col2 and so forth by 2
+    df[1,seq(3, length(df), by = 2)] <- df[1,seq(2, length(df), by = 2)]
+    df[1,] <- str_c(df[1,], " ", df[2,])
+    df <- df[-2,]
+    df <- df[1:39,]
+    df[1,1] <- "Ages"
+    colnames(df) <- df[1,]
+    return(df)
+}
 
 
-##take "number cols"
-dfEarningsNums <- select(dfEarnings, Ages, Sex, contains("number"))
+getEarningsAsTidyDF <- function(df)
+{
+    df <- filter(df, Ages != "")   #remove blank rows
+    df <- df[-1,]
+    
+    # add column at end containg gender of corresponding rows
+    df["Sex"] <- unlist(list(rep("B", nrow(df)/3),rep("M", nrow(df)/3),rep("F", nrow(df)/3)))
+    
+    ##make df with just "number cols"
+    dfNums <- select(df, Ages, Sex, contains("number"))
+    
+    ##make df with just  "pct cols"
+    dfPct <- select(df, Ages, Sex, contains("percent"))
+    
+    #rotate both of them
+    dfEarnNumRot <- gather(dfNums, Income, Amt, -Ages, -Sex)
+    dfEarnPctRot <- gather(dfPct, Income, Pct, -Ages, - Sex)
+    
+    #put those rotated columns together
+    dfEarnNumPct <- bind_cols(dfEarnNumRot, dfEarnPctRot[length(dfEarnPctRot)])
+    
+    #some general text cleanup
+    dfEarnNumPct$Income <- str_replace(dfEarnNumPct$Income, "Number", "")
+    dfEarnNumPct$Ages <- str_replace(dfEarnNumPct$Ages, "Both sexes|Male|Female", "Total")
+    dfEarnNumPct$Amt <- (lapply(dfEarnNumPct$Amt, function(x) {str_replace_all(x, ",*", "")}))
+    return(dfEarnNumPct)
+}
 
-##take "pct cols"
-dfEarningsPct <- select(dfEarnings, Ages, Sex, contains("percent"))
+initialize()
+df <- getEarningsAsDF()
 
-#rotate
-dfEarnNumRot <- gather(dfEarningsNums, Income, Amt, -Ages, -Sex)
-dfEarnPctRot <- gather(dfEarningsPct, Income, Pct, -Ages, - Sex)
-dfEarnNumPct <- bind_cols(dfEarnNumRot, dfEarnPctRot[length(dfEarnPctRot)])
+dfTidy <- getEarningsAsTidyDF(df)
 
-dfEarnNumPct$Income <- str_replace(dfEarnNumPct$Income, "Number", "")
-dfEarnNumPct$Ages <- str_replace(dfEarnNumPct$Ages, "Both sexes|Male|Female", "Total")
 
-head(dfEarnNumPct)
 
 
 
