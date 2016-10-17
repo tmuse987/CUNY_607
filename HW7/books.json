@@ -1,0 +1,51 @@
+
+{"Uncoventional_Literature" :
+	[
+		{
+			"Author": 
+				{
+					"Neil Gaiman":
+					"Terry Pratchett"
+				},
+			"title": "Good Omens, The Nice and Accurate Prophecies of Agnes Nutter",
+			"copyright": 1990,
+			"odd_character": "Anathema Device",
+			"quote": "It's Tchaikovsky's 'Another One Bites the Dust',\" said Crowley, closing his eyes as they went through Slough. To while away the time as they crossed the sleeping Chilterns, they also listened to William Byrd's \"We Are the Champions\" and Beethoven's \"I Want To Break Free.\" Neither were as good as Vaughan Williams's \"Fat-Bottomed Girls.",
+			"award": "Locus and World Fantasy Nominee for Best Novel"			
+		},
+		{
+			"Author": "Douglas Adams",
+			"title": "The Long Dark Tea Time of the Soul",
+			"copyright": 1988,
+			"odd_character": "Dirk Gently",
+			"quote": "I may not have gone where I intended to go, but I think I have ended up where I needed to be.",
+			"award": "Alas, none"					
+		},
+		{		
+			"Author": "Philip K. Dick",
+			"title": "Do Androids Dream of Electric Sheep",
+			"copyright": 1968,
+			"odd_character": "Buster Friendly",
+			"quote": "You will be required to do wrong no matter where you go. It is the basic condition of life, to be required to violate your own identity. At some time, every creature which lives must do so. It is the ultimate shadow, the defeat of creation; this is the curse at work, the curse that feeds on all life. Everywhere in the universe.",
+			"award": "Nebula Award Nominee"
+		},
+		{
+			"Author": "John Kennedy Toole",
+			"title": "A Confederacy of Dunces",
+			"copyright": 1980,
+			"odd_character": "Betty Bumper",
+			"quote": "You can always tell employees of the government by the total vacancy which occupies the space where most other people have faces.",
+			"award": "Pulitzer Prize for Fiction"			
+		},
+		{
+			"Author": "Karen Russell",
+			"title": "Swamplandia",
+			"copyright": 2011,
+			"odd_character": "The Bird Man",
+			"quote": "I came to hate the complainers, with their dry and crumbly lipsticks and their wrinkled rage and their stupid, flaccid, old-people sun hats with brims the breadth of Saturn's rings.",
+			"award": "One of Three Nominees for Pulitzer Prize for Fiction 2012"
+		}	
+	]	
+}		
+
+

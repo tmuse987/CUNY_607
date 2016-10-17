@@ -1,0 +1,28 @@
+<?xml version="1.0" encoding="ISO-8859-1"?>	
+<!DOCTYPE html 
+     PUBLIC "-//W3C//DTD XHTML 1.0 Strict//EN"
+     "http://www.w3.org/TR/xhtml1/DTD/xhtml1-strict.dtd">
+<Uncoventional_Literature>		
+	
+
+	<book id="1">
+		<Author>Neil Gaiman, Terry Pratchett</Author><title>Good Omens, The Nice and Accurate Prophecies of Agnes Nutter</title><copyright>1990</copyright><odd_character>Anathema Device</odd_character><quote>"It's Tchaikovsky's 'Another One Bites the Dust'," said Crowley, closing his eyes as they went through Slough. To while away the time as they crossed the sleeping Chilterns, they also listened to William Byrd's "We Are the Champions" and Beethoven's "I Want To Break Free." Neither were as good as Vaughan Williams's "Fat-Bottomed Girls."</quote><award>Locus and World Fantasy Nominee for Best Novel</award>
+	</book>
+	<book id="2">		
+		<Author>Douglas Adams</Author><title>The Long Dark Tea Time of the Soul</title><copyright>1988</copyright><odd_character>Dirk Gently</odd_character><quote>I may not have gone where I intended to go, but I think I have ended up where I needed to be.</quote><award>Alas, none</award>
+	</book>
+	<book id="3">		
+		<Author>Philip K. Dick</Author><title>Do Androids Dream of Electric Sheep</title><copyright>1968</copyright><odd_character>Buster Friendly</odd_character><quote>You will be required to do wrong no matter where you go. It is the basic condition of life, to be required to violate your own identity. At some time, every creature which lives must do so. It is the ultimate shadow, the defeat of creation; this is the curse at work, the curse that feeds on all life. Everywhere in the universe.</quote><award>Nebula Award Nominee</award>
+	</book>
+	<book id="4">		
+		<Author>John Kennedy Toole</Author><title>A Confederacy of Dunces</title><copyright>1980</copyright><odd_character>Betty Bumper</odd_character><quote>You can always tell employees of the government by the total vacancy which occupies the space where most other people have faces.</quote><award>Pulitzer Prize for Fiction</award>
+	</book>
+	<book id="5">		
+		<Author>Karen Russell</Author><title>Swamplandia</title><copyright>2011</copyright><odd_character>The Bird Man</odd_character><quote>I came to hate the complainers, with their dry and crumbly lipsticks and their wrinkled rage and their stupid, flaccid, old-people sun hats with brims the breadth of Saturn's rings.</quote><award>One of Three Nominees for Pulitzer Prize for Fiction 2012</award>
+	</book>
+	
+
+	
+</Uncoventional_Literature>		
+
+
