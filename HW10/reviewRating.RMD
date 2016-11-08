@@ -1,0 +1,319 @@
+---
+title: "Weigel CUNY607-HW10"
+author: "Todd Weigel"
+date: "November 6, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+library(XML)
+library(stringr)
+library(RCurl)
+library(slam)
+library(NLP)
+library(tm)
+library(SnowballC)
+library(RWeka)
+library(RTextTools)
+seedURL <-"http://www.allmusic.com/artist/nick-cave-mn0000397880"
+```
+
+##Overview
+####This weeks assignemnet was to be able to have an R program classify new documents based on training of algorithm via like documemts. For this assignment, the Allmusic.com website was scraped to return a number of different artists and reviews and rating of their albums (from a 0-5 star stystem).  The idea is that through training we will then be able to have the algorithm "read" the review and determine if that review deems the album either "good" or "bad".  To be more practical, the 5 start ratings system was converted into an essentially pass/fail metric, so that any album with 3.0 or less  star rating is deemed "bad" and above that deemed "good".  The feeling was that to try an train an algorithm to really be able to rate from 0-10, was beyond reasonable.
+
+####The coding is basically in two sets.  One is the set of code that does the scraping of Allmusic.com.  While the other is the set of code, that attempts through a supervised learning algorithm, to train itself to determine what makes up a good or bad review.
+
+##Scraping
+
+####First lets go through the scraping code.  (Note the scraping code will not be executed as part of this RMD, as it takes quite a long time, instead the results from the scraping have already been saved to a file, and the the classfication section in the second part of this document will read in that file.  To actually execute the scraping all one needs to do is execute this function: popReview() )
+
+####Below is an inner function, that for the passed in URL retrieves the screen code and stores into an R object.
+
+```{r}
+getRootHTML <- function(artistURL)
+{
+    html <- getURL(artistURL,
+                   useragent = str_c(R.version$platform, 
+                                     R.version$version.string,
+                                     set=", "))
+    return(xmlRoot(htmlParse(html)))
+}
+```
+
+####Next is a function that gets the actual review Text, which will be the text used in the training/rating exercises.  Note this calls the above getRootHtml function to get the data from the review page.
+```{r}
+getReviewText <- function(reviewURL)
+{
+    rootReview <- getRootHTML(reviewURL)
+    #this gets review text
+    reviewList <- xpathSApply(rootReview, '//*[@id="cmn_wrap"]/div[1]/div[2]/section[1]/div/p', xmlValue)
+    review <-NULL
+    # could be multiple paragraphs of review, so loop through them all and concatenate
+    for (r in reviewList)
+    {
+        review <- str_c(review,r)
+    }
+    review <- ifelse (is.null(review), NA, review)  #set empty review to NA for later filtering
+    return(review)
+}
+```
+
+####Next are a couple of functions that essentially do just what they say, read/write the artist data (review, artist name, album rating) to and from a file, to and from a dataframe.
+
+```{r}
+writeArtistDataToFile <- function(dfArtist, fileName = "artistInfo.tbl")
+{
+    write.table(dfArtist, file = fileName)
+}
+
+readArtistDataFromFile <- function(fileName)
+{
+    return(read.table(fileName, stringsAsFactors = FALSE))
+}
+```
+
+####The next function is large and does the bulk of the screen scraping work.  It gets the information from the "discography"" page of allmusic.com, and the imporant fields for us include all albums for an artist, the allmusic rating, and a link to a review.  Basically this codes extracts each of those fields and puts them in a dataframe.  It also loops (via lapply) through all the review links and gets the text of the review and saves that to the dataframe as well.
+
+```{r}
+getArtistRepository <- function(artistURL)
+{
+    artistRootHTML <- getRootHTML(str_c(artistURL, "/discography"))
+    
+    artistName <- xpathApply(artistRootHTML,'//*[@id="cmn_wrap"]/div[1]/div[2]/header/div/hgroup/h1', xmlValue )
+    artistName <- str_replace_all(artistName, "\n +|  +", "")
+    #header <- xpathSApply(artistRootHTML, "//table/tr/th", xmlValue)
+    
+    #get album names
+    albums <- xpathSApply(artistRootHTML, '//*[@id="cmn_wrap"]/div[1]/div[2]/section/table/tbody/tr/td[4]/a[1]', xmlValue)
+    
+    #reviews is first attribute
+    reviewLinks <- xpathSApply(artistRootHTML, '//*[@id="cmn_wrap"]/div[1]/div[2]/section/table/tbody/tr/td[4]/a[1]', xmlAttrs)[1,]
+    
+    #get review text for each link
+    reviews <- lapply(reviewLinks ,getReviewText)
+    
+    #rating is 2nd attr of this section
+    ratings <- xpathSApply(artistRootHTML, '//*[@id="cmn_wrap"]/div[1]/div[2]/section/table/tbody/tr/td[6]', xmlAttrs)[2,]
+    
+    #ratings is first numeric value, and is from 0-9, so add 1 to make 1-10 
+    #(actual values on screens are 5 stars, which can have 1/2 values)
+    
+    ratings <- as.numeric(str_extract(ratings, "[[0-9]]")) + 1
+    
+    # make ratings "good or bad", as opposed to a scale of 1-10 1-5 is bad, 5-10 is good
+    #ratings <- ceiling(ratings/5)  
+    
+    #make data.frame, add colnames and return it
+    df <- data.frame(artistName, albums, reviewLinks, ratings, unlist(reviews), stringsAsFactors = FALSE)
+    colnames(df) <- c("Artist", "Album", "Review_Links", "Rating", "Review")
+    return(df)
+}
+```
+
+####Next we have a function that gets artist "related" to the original artist.  Basically allmusic.com for any given artist, has a page of artists "related" to that person/band.  Either they have similar characteristics, or are offshoots or side projects of a given artist or band.  This just goes to that page and scrapes the links to all the other artists and returns them.
+
+```{r}
+getRelatedArtists <- function(artistURL)
+{
+    relatedRootHTML <- getRootHTML(str_c(artistURL, "/related"))
+    relatedAddr <- xpathSApply(relatedRootHTML, '//*[@id="cmn_wrap"]/div[1]/div[2]/section[1]/ul/li/a', xmlAttrs)[1,]
+    return(relatedAddr)
+}
+```
+
+####Lastly for the screen scraping section, we have the section of code that goes through all the above code to come up with a large dataframe holding 1500+ reviews to be used as the input into the training/testing for sentiment analysis.  Basically it just goes through the original seed artist, then all the artists "related"" to the original artist, and then all the artists related to those related artists, until we hit 1500 entries in the artist repository or run out of links (this does beg for a recursive function).
+
+####Couple of points, one is that occassional pages fail to parse through correctly and throw and error, so the code below use the try construct to ignore those errors...we don't care if some fall through, as long as we are pulling most of them.  Also this code removes entries that do not have a review or rating, as that will throw off the training.
+```{r}
+popReviews <- function(fileName = NULL)
+{
+    
+    relatedToSeed <- getRelatedArtists(seedURL)
+    artistRep <- getArtistRepository(seedURL)
+    
+    related <- NULL
+    for(artist in relatedToSeed)
+    {
+        aRep <- getArtistRepository(artist)
+        artistRep <- rbind(artistRep, aRep)
+        related <- c(related, getRelatedArtists(artist))
+    }
+    
+    idx <- 1
+    #bug alert this 1500 limit is not working...we go until we run out of related artists
+    while(length(artistRep) <= 1500 & idx < length(related))
+    {
+        #if we fail on one keep going, don't really care if some get missed for this exercise
+        try({
+            aRep <- getArtistRepository(related[idx])
+            artistRep <- rbind(artistRep, aRep)
+            artistRep <- artistRep[!is.na(artistRep$Review),]
+            artistRep <- artistRep[!is.na(artistRep$Rating),]
+        })
+        idx <- idx+1
+    }
+    
+    colnames(artistRep) <- c("Artist", "Album", "Review_Links", "Rating", "Review")
+    
+    if (!is.null(fileName))        
+    {
+        writeArtistDataToFile(artistRep, fileName)
+    }
+    
+    return(artistRep)
+}
+
+```
+
+
+##Sentiment Analysis
+####The goal of the sentiment analysis, or classification, is to read in a large subset of the reviews, and train our system so that future reviews can be parsed and determined to be "good" or "bad" reviews.  The results, while successful in a sense, as the testing clearly showed the algorithms to be better than chance, were nonetheless disappointing, as the success rate average only about 60%. Below is a description of the code, as well as the results towards the bottom of this document.
+
+####Create Corpus--This function reads in the a table from a file, containing the scraped artist and review data, and creates a corpus. As part of this process, it does a bunch of manipulations to clean the data, from removing duplicate entries to adjusting the scoring to be "pass/fail", to removing punctuation and "Stemming" the text so that we have root words as opposed to many variations of the same word.
+```{r}
+#creates a corpus from the passed in filename, and does various clean up to make the corpus more "trainable"
+createCorpus <-function(artistsFileName)
+{
+    
+    artists <- readArtistDataFromFile(artistsFileName)
+    #remove duplicates, improvement would be to have this done during scraping, as that would be more time efficient
+    artists <- unique(artists)
+    
+    #change the 0-10 rating to a "pass/fail" rating of 1/2
+    #note allmusic seems to have grade inflation problem, which seems to make training dificult
+    #as most everything ranks better than 3 stars, so change the ranking a little and making under 3 1/2
+    #stars considered "bad" and 3 1/2 and above good
+    artists$Rating  <- ceiling((artists$Rating-2)/5)
+    artists$Rating[artists$Rating == 0] <- 1  # make 1 the few that end up zero by above manipulation
+    
+    #make the corpus and clean up by removing extraneous items, e.g., punctuation, numbers etc
+    reviews <- VectorSource(artists$Review)
+    artists_corpus <- Corpus(reviews)
+    artists_corpus <- tm_map(artists_corpus, removeNumbers)
+    artists_corpus <- tm_map(artists_corpus, str_replace_all, pattern = '[[: punct:]]', replacement = ' ')
+    artists_corpus <- tm_map(artists_corpus, tolower)
+    artists_corpus <- tm_map(artists_corpus, removeWords, words =  stopwords("en"))
+    
+    #some prior transformations may change the document type, so default it back to plaintextdocument
+    artists_corpus <- tm_map(artists_corpus, PlainTextDocument)
+    #"stem" various words, to reduce variations of words with essentially duplicate meanings
+    artists_corpus <- tm_map(artists_corpus, stemDocument)
+   
+    for (i in 1:length(artists_corpus))
+    {
+        meta(artists_corpus[[i]], "rating") <- artists$Rating[i]
+    }
+    return (artists_corpus)
+}
+```
+
+
+####Create a Document-Term Matrix   This function is pretty simple, just calls the documentTermMatrix function to convert our corpus into a "DTM".  There are two flavors one uses a tokenize, to create 1 and 2 word tokens as part of the document (instead of just all 1 word tokens), and the other flavor is to just create a DTM without the tokenizing.  Note the results demonstrated later are with the tokenized DTM, as that returned better results.
+
+```{r}
+#returns DTM, either with a bigram, with lots of tokens or simpler dtm with no tokenizer function
+createDTM <- function(corp, bigram = TRUE)
+{
+    
+    if (bigram)
+    {
+        #this makes for big dtm, but helps the training
+        BigramTokenizer <- function(x){NGramTokenizer(x, Weka_control(min = 1, max = 2))}
+        dtmBigram <- DocumentTermMatrix(corp, control = list(tokenize = BigramTokenizer))
+        
+        #drop terms not appearing in at least 10 documents
+        dtmBigram <- removeSparseTerms(dtmBigram, 1 - (10/length(corp)))
+        return(dtmBigram)
+    }
+    else
+    {
+        dtm <- DocumentTermMatrix(corp)
+        dtm <- removeSparseTerms(dtm, 1 - (10/length(corp)))
+        return(dtm)
+    }
+} 
+
+```
+
+####Train and test our reviews.  This function does what it says.  We first create a container that has 3/4 of the entries to be the training set, and then the last 1/4 will be the test set.  Next we run on 3 algorithms, a Support Vector Machine, Random Forest, and Maximum Entropy, and save the results into a dataframe which is returned.
+
+```{r}
+#returns a data frame with results of training against our DTM using SVM, Forest and MaxEntropy methods
+trainandGetResults <- function(dtm, corp)
+{
+    rating_labels <- unlist(meta(corp, "rating"))
+    
+    container <- create_container(dtm, 
+                                  labels = rating_labels,
+                                  trainSize = 1:(length(rating_labels)*.75),
+                                  testSize = ((length(rating_labels)*.75)+1):length(rating_labels),
+                                  virgin = FALSE
+                                  )
+    
+    svm_model <- train_model(container, "SVM")
+    tree_model <- train_model(container, "TREE")
+    maxent_model <- train_model(container, "MAXENT")
+    
+    svm_out <-classify_model(container, svm_model)
+    tree_out <- classify_model(container, tree_model)
+    maxent_out <- classify_model(container, maxent_model)
+    
+    labels_out <- data.frame(
+        correct_label = rating_labels[((length(rating_labels)*.75)+1):length(rating_labels)],
+        svm = as.character(svm_out[,1]),
+        tree = as.character(tree_out[,1]),
+        maxent = as.character(maxent_out[,1]),
+        stringsAsFactors = F)
+}
+
+```
+##Results  
+####As can be seen the results are around 60% succesful identification, which shows the training did indeed work, but obviously that is a rather unsatisfying low success rate.  
+
+```{r}
+
+artistCorpus <- createCorpus("artistinfo.tbl")
+dtm <- createDTM(artistCorpus)
+results <- trainandGetResults(dtm, artistCorpus)
+
+##SVM Results
+table(results[,1] == results[,2]) / nrow(results)
+## Random forest performance
+table(results[,1] == results[,3]) /nrow(results)
+## Maximum entropy performance
+table(results[,1] == results[,4]) / nrow(results)
+```
+
+####If we dig a little further, we can notice some interest results if we filter by either "bad" reviews, or "good" reviews.  Here are the results for the "bad" reviews.    Two of the three algorithms return bascially chance results, but the "forest"  algorithm was fairly good, with 70% success rate.
+
+```{r}
+#show results just for "bad" albums
+resultsBad <- results[results$correct_label == 1,]
+#SVM Results
+table(resultsBad[,1] == resultsBad[,2]) / nrow(resultsBad)
+## Random forest performance
+table(resultsBad[,1] == resultsBad[,3]) / nrow(resultsBad)
+## Maximum entropy performance
+table(resultsBad[,1] == resultsBad[,4]) / nrow(resultsBad)
+
+```
+
+####Here are the results for "Good Reviews".  What is interesting is the SVM and Max Entropy models did well (relatively) with 73% and 65% success rates respectively.   The Tree model though, was actual worse than chance, so that if one chose the opposite result from its prediction you would be more likely to have the correct answer.
+
+```{r}
+
+#show results just for "good" albums
+resultsGood <- results[results$correct_label == 2,]
+#SVM Results
+table(resultsGood[,1] == resultsGood[,2]) / nrow(resultsGood)
+## Random forest performance
+table(resultsGood[,1] == resultsGood[,3]) / nrow(resultsGood)
+## Maximum entropy performance
+table(resultsGood[,1] == resultsGood[,4]) / nrow(resultsGood)
+
+```
+
+##Summary
+
+####This was an interesting exercise, and more work would need to be done to see if alternate algorithms, or more tweaking of data and or factors for the algorithms could improve the rather mediocre results.  Of course it is possible that the nature of the reviews on the allmusic.com site do not easily lend themselves to classification by today's techinques, i.e., the descriptions of goodness or badness in a review may not easily be patterned out by current methods, or perhaps reviewers are very inconsistent with their ratings (i.e., they write a two album reviews that if read by a person, that person might give equivalent scores to each album, yet the reviewer chose to give the albums two different scores.), and hence no algorithm would be well equipped to do with essentially bad and random labeling on the part of the reviewers.
