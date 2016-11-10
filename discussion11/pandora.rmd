@@ -1,0 +1,34 @@
+---
+title: "CUNY 607 Recommender System  Discussion Post"
+author: "Todd Weigel"
+date: "November 9, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+###Pandora Recommender and Genome Project
+
+####Overview:  Pandora, as presumably most already known, allows one to set a seed(s) consisting of artists, songs, or genre (classical guitar, 80's alternative rock and so forth), to hopefully play hours of music one likes with minimal listener intervention.  Further adjustments can be made by "thumbing up" or "thumbing down" tracks so that Pandora favors or disables playing of certain songs.
+
+####1. Scenario Analysis
+1.  Target Users:  Clearly target users are hopefully captive people who wish to listen to a long stream of music without user intervention.  A secondary target user, is advertisers, as clearly Pandora needs a revenue stream from those who don't wish to pay the subscriber fee, or wish to try out the product.
+2.  Key Goals:  Clearly the primary goal is that users will have an intuitive interface for the application, and that it will require miminal involvement from the user so that music can be enjoyed for long periods, essentially making it a radio station that plays what you want and never not what you want. Users who wish to have more involvement would likley be chosing alternative apps and venues: Spotify, Amazon or Apple Music stores and so forth.  For the advertiser target, wthey will wish to have the goal of generating the most interest in their product so as to maximize clicking to the advertiser site.
+3.  How can you help the user achieve their goals:  For listeners, Pandora wants to make sure that their computed related artists and songs from a given seed, and from further user refinement with additional seeds and user "thumbs up or down" on tracks provide songs that the user likes, while avoiding reduncancy (i.e, playing same track too frequently) or playing too narrow a range of related artists so that the user becomes bored.  For the advertisers, Pandora needs to try and determine through characteristics of music chosen, listener demographic (e.g., male/female, age), what will generate the most user clicks to an advertiser site.
+
+####2.  Reverse Engineering 
+Pandora tends to be reticent in sharing details of  their propietary system for creaing user stations and determining what tracks to play.  Below are some links, one from Pandora itself and a couple of articles regarding how Pandora goes about its tasks.
+    
+*    https://www.pandora.com/about/mgp
+*    http://scholarslab.org/digital-humanities/more-on-pandora-genres/
+*    http://boingboing.net/2014/05/24/pandoras-music-genome-proj.html
+    
+Basically, Pandora has created a Music "genome"" that catalogs close to 500 traits a piece of music may have.  Most traits are secret, but the published ones include typical musical traits such as major/minor tonality, degree of syncopation, folk influenced, and also more obscure categories such as "headnodic beats", and my personal favorite, "extensive vamping" which is actual something that an awful lot of music has and is just repetition of a portion of a song along with possible improvisation on that repeated part. What maybe surprising for a tech compnay, is that Pandora does not catalog the music through algorithms, rather a team of listeners listen to thousands of tracks a month and tag each with the various characteristics they think it contains.  REgarding other bases of recommendation, one of the items mentioned in the articles is that negative feedback is far more important than positive feedback, which makes intuitive sense...people are going to leave your service much faster if they keep hearing music they really dislike.  This cataloging of music is differnt than some other projects which are based on collabartive filtering, which tries to match up your taste to exsiting user's taste, which would hopefully cross pollinate each other.  One advantage Pandora has over this type of algorithm, is Pandora wouldn't be biased by popularity (which collabartive filering tends to do), so in theory you could hear a wider variety of music. 
+
+####3.  Recommendations.  
+Pandora is a great service, but definitely has things it could improve upon.  First and this really is not related to the recommender system itself, is the limited catalog of under 2 million tracks.  While this may sound like a lot, it really isn't though, when one ponders all the genres of music, new and old...Spotify for example, has 30 million entries in its catalog and I often can't find everything I like on Spotify.  So, if you listen frequently, there is a lot of repetition (and as an aside, how many times can Pandora play "Hallelujah"...and yet still not play the Leonard Cohen version), although that can be mitigated some by adding additional "seeds" to a given station.  But this leads to the biggest recommendation I have, is that Pandora needs to have the ability (perhaps optional on user selection for a station) to further broaden (or perhaps more great broaden) a stations appeal based on songs or pieces of music you like.  That is, if you click "thumbs up" on a number of tracks that all contain some silmilar characteristics that are not in your original seed(s), these new characteristics ought to become a new "seed" in and of themselves, which would both limit the repetition as well as potentially help broaden your horizon..
+    
+    
