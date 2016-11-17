@@ -1,0 +1,153 @@
+---
+title: "Weigel_CUNY607_Proj4"
+author: "Todd Weigel"
+date: "November 16, 2016"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+##Assignment Overview
+####This assignment was to work with converting a SQL type DB's data into an noSQL type DB.  The databases chosen to work with on this project was mySQL for the SQL DB and MongoDB for the noSQL db.  Obviously there are various ways to do such a task, export data into a file from the SQL DB, and then load that file into the noSQL DB would be one such method.  Here, though, R was used to programatically read the data from the mySQL DB and then insert into noSQL Mongo DB.
+
+##The Code...
+####The code is a bunch of R functions, and one just needs to call the function "convertMySQLToMongo" with a parameter of the source mySQL schema, and another parameter being a list of tables that one wants to import.  The code below is commented so for most details, I refer you to those comments.
+
+####But, one function will be called out: the "popMongoTable" function.  This function does the actual work, of reading data from mySQL to Mongo for a passed in table name parameter.  The work needing to be done, is just one line:
+####mongo(collection = tableName)$insert(dbGetQuery(dbConn, str_c("select * from ", tableName)))
+####So essentially to do a simple migration, requires one line of code.
+
+```{r}
+library(jsonlite)
+library(mongolite)
+library(DBI)
+library(RMySQL)
+library(stringr)
+
+rDBName <- "flights"
+passWordFile <- "L:\\school\\cuny\\dbPassword.txt"
+
+
+##this will drop any existing collections with the same names we wish to load...beware :)
+dropMongo <- function(collections)
+{
+    #we will get error messages if we run this clean up and the collection doesn't exist in mongo
+    ##so turn off messages
+    options(show.error.messages = FALSE)
+    
+    for(c in collections)
+    {
+        m <- mongo(collection = c)
+        try(m$drop())   ##returns error if doesn't exist, could do existance checks, but why bother
+    }
+
+    options(show.error.messages = TRUE)
+}
+
+##just a function to return a mysql db connection
+getDBConn <- function(dbName)
+{
+    db <- dbDriver("MySQL")
+    dbConn <-dbConnect(db, user='root',scan(passWordFile, what = "character"),dbname= dbName);
+    return(dbConn)
+}
+
+##takes in a table name that exists on mySQL db, and a mysql connection, and copies data from one db to the other
+popMongoTable <- function(tableName, dbConn)
+{
+    mongo(collection = tableName)$insert(dbGetQuery(dbConn, str_c("select * from ", tableName)))
+}
+
+##this takes in my sql schema name, connects to it, and then loops through the list of passed in tables
+##calling popMongoTable to copy the data from mysql to mongo
+convertMySQLToMongo <- function(db, tables)
+{
+    conn <- getDBConn(db)
+    lapply(tables, popMongoTable, conn)
+    dbDisconnect(conn)
+}
+
+#get a list of tables for a given schema on mysql
+getMySqlTables <- function(db)
+{
+    conn <- getDBConn(db)
+    tables <- dbListTables(conn)
+    dbDisconnect(conn)
+    return(tables)
+}
+
+
+#function that will compare (and print) counts from mysql and mongo, so we can see all data transferred
+#also prints head of collection from mongo for visual verification that data looks right
+compareDBs <- function(sqlDB, table)
+{
+    conn <- getDBConn(sqlDB)
+    print(str_c("Count from mySql table: ", table, " is ", dbGetQuery(conn, str_c("select count(*) from ", table))))
+    c <- mongo(collection = table)
+    print(str_c("Count from Mongo Collection: ", table, " is ", c$count()))
+    print(head(c$find(),5))
+    dbDisconnect(conn)
+    
+}
+
+```
+
+##Let's Use it...
+
+####To test the functionality, we will migrate the "flights" schema stored in mySQL.  This consists of tables, airlines, airports, flights, planes, weather.  We will first run a command to drop any existing collections with the names of the tables we will import...just so we are sure to start fresh.
+
+```{r}
+dropMongo(getMySqlTables("flights"))
+```
+
+####Ok, now let's move stuff from mySQL to Mongo:
+
+```{r}
+convertMySQLToMongo("flights", getMySqlTables("flights"))
+```
+
+####Ok done :)
+
+####Lets check our work.   First let's just query the airlines collection on Mongo, and see if we get anything back:
+
+```{r}
+c <- mongo(collection = "airlines")
+c$find('{"carrier" : "AA"} ')
+
+```
+
+####Ok, we did, so now let's run the compare function through all the tables and see if all the counts match, as well as see the top few rows of each collection on Mongo.
+
+
+```{r}
+compareDBs(rDBName, "airlines")
+compareDBs(rDBName, "airports")
+compareDBs(rDBName, "flights")
+compareDBs(rDBName, "planes")
+compareDBs(rDBName, "weather")
+```
+
+####Clearly, the compare function is not very efficient, as it loads the whole Mongo collection into a dataframe, and then does a "head"" to get the top 5 rows.  Clearly if querying from Mongo itself through R, you'd want to write a query to return a subset of rows...but often in R we are just going to load the whole collection into a dataframe, and work from there, so not sure our inefficiency here is that critical.
+
+####Next, let's do a table from a different schema.  The "Diamonds" from the ggplot package was imported into mySQL, so lets see if we can load that into Mongo.
+
+```{r}
+dropMongo("diamonds")
+convertMySQLToMongo("diamonds", "diamonds")
+compareDBs("diamonds", "diamonds")
+```
+
+####Looks good.
+
+
+##Discussion of SQL vs. noSQL Databases.
+
+####Ok, so great we did this conversion, would we want to use a noSQL DB, or a SQL DB to store data going forward?  Well first thing to note, the data we imported from flights and diamonds, had no foreign keys to other tables, and hence we didn't need to worry about referential integrity.  While RI can be worked into noSQL, it is much harder, while RI is inherent in a (properly) designed SQL schema.  Another data advantage to SQL is transactional Integrity.  With the structure of noSQL DB's, it is hard to validate that a "transactional" upsert/delete type query and be sure stale data will not be read, or only one record of a given type is inserted.  One last advantage mentioned is SQL language itself, JSON CRUD operations for complex queries become much more complicated to code than the SQL query counterparts.
+
+####But noSQL DB's clearly have advantages over SQL versions (one needs the right tool for the job).  SQL databases are more difficult to scale, so for storing massive amounts of data (that doesn't have as strict data integerity requirements) noSQL is a better choice as it scales more easily.  noSQL is also simpler for getting started and getting to work.  To work with a SQL db, one needs to define the metadata (data types, keys, etc.), while you don't have to do that with noSQL.  In our exercise, it was quite easy to import the SQL tables into Mongo collections, but the reverse would have been more difficult (granted one could default all the data to varchar(max) upon import but that isn't really what one should do).  Lastly, noSQL DB's are generaly faster at retrieving data than a SQL DB (obviously one would need to get correctly tune indexes to do so...).
+
+####Clearly noSQL DB's aren't going to replace SQL DB's (at least not in noSQL DB's current state), but they have their place, just like the SQL DB's that have been around much longer.
+
+
